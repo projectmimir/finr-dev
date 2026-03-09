@@ -1,0 +1,55 @@
+# OS / Editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+navigation.json
+
+# Gradle / build output
+.gradle/
+build/
+**/build/
+
+# Local SDK configuration
+local.properties
+
+# Native / NDK intermediates
+.cxx/
+externalNativeBuild/
+
+# Kotlin / Java compilation artifacts
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# APK / AAB outputs (generated artifacts)
+*.apk
+*.aab
+*.ap_
+*.idsig
+output-metadata.json
+
+# Logging
+*.log
+
+# Environment files / secrets
+.env
+.env.*
+!*.env.example
+keystore.properties
+*.jks
+*.keystore
+*.p12
+
+# Firebase / Google services (if added later)
+google-services.json
+

@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">finr</string>
+    <string name="permission_title">SMS permission needed</string>
+    <string name="permission_body">This app reads SMS messages to show them in a list.</string>
+    <string name="permission_cta">Grant permission</string>
+    <string name="empty_state">No messages found.</string>
+</resources>
