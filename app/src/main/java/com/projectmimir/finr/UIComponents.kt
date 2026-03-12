@@ -289,7 +289,6 @@ fun SummaryCard(
         }
     }
     val monthlySentMore = debitTotal > creditTotal
-    val monthlyBorderColor = if (monthlySentMore) monthlySentBorderColor() else monthlyReceivedBorderColor()
     val monthlyShadowColor = if (monthlySentMore) monthlySentShadowColor() else monthlyReceivedShadowColor()
     Card(
         modifier = Modifier
@@ -305,7 +304,7 @@ fun SummaryCard(
                     )
                 } else if (isMonthly) {
                     Modifier.shadow(
-                        elevation = 2.dp,
+                        elevation = 6.dp,
                         shape = RoundedCornerShape(12.dp),
                         ambientColor = monthlyShadowColor,
                         spotColor = monthlyShadowColor
