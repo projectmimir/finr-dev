@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
@@ -14,6 +15,7 @@ import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,11 +24,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -45,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,8 +61,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import java.io.File
@@ -79,6 +90,16 @@ private data class PickerConfig(
     val options: List<String>,
     val onSelect: (String) -> Unit
 )
+
+@Composable
+private fun ConfigureLightStatusBarIcons() {
+    val view = LocalView.current
+    val themeMode = appThemeMode()
+    SideEffect {
+        val window = (view.context as? FragmentActivity)?.window ?: return@SideEffect
+        WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = themeMode == ThemeMode.LIGHT
+    }
+}
 
 private fun showDatePicker(
     context: android.content.Context,
@@ -189,6 +210,7 @@ fun SplashScreen() {
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
                 .padding(bottom = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -267,7 +289,6 @@ fun SmsListScreen(
     val homeListState = rememberLazyListState()
     var editing by remember { mutableStateOf<TransactionEntity?>(null) }
     var adding by remember(initialSharedText) { mutableStateOf(initialSharedText != null) }
-    val expandedMap = remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var showCalendar by remember { mutableStateOf(false) }
     var showCalendarPicker by remember { mutableStateOf(false) }
     var calendarWholeMonth by remember { mutableStateOf(false) }
@@ -287,9 +308,6 @@ fun SmsListScreen(
     var exportPicker by remember { mutableStateOf<PickerConfig?>(null) }
     var showDb by remember { mutableStateOf(false) }
     var dbSchema by remember { mutableStateOf<List<DbTableSchema>>(emptyList()) }
-    var categoryEditTxn by remember { mutableStateOf<TransactionEntity?>(null) }
-    var categoryInput by remember { mutableStateOf("") }
-    var subcategoryInput by remember { mutableStateOf("") }
     val activity = context as FragmentActivity
     var pendingCsvContent by remember { mutableStateOf<String?>(null) }
     var pendingCsvFileName by remember { mutableStateOf<String?>(null) }
@@ -313,10 +331,6 @@ fun SmsListScreen(
             pendingCsvFileName = null
             showExportDialog = false
         }
-    }
-
-    fun setExpanded(id: String, expanded: Boolean) {
-        expandedMap.value = expandedMap.value.toMutableMap().apply { put(id, expanded) }
     }
 
     fun filteredForExport(year: Int, month: Int?): List<TransactionEntity> {
@@ -359,13 +373,6 @@ fun SmsListScreen(
                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    fun openCategoryDialog(txn: TransactionEntity) {
-        categoryEditTxn = txn
-        val current = categoryForTxnClass(categories, txn.txnClass)
-        categoryInput = current?.name ?: ""
-        subcategoryInput = current?.subcategory ?: ""
     }
 
     // Screen-level routing: edit/add/db views replace the list body.
@@ -564,62 +571,6 @@ fun SmsListScreen(
                         )
                         Text(text = AppText.THEME_MIDNIGHT)
                     }
-                }
-            }
-        )
-    }
-
-    if (categoryEditTxn != null) {
-        val categoryNames = categoryNamesFromDb(categories)
-        val subcategoryOptions = subcategoriesFor(categories, categoryInput).ifEmpty { listOf(AppText.UNCAT) }
-        AlertDialog(
-            onDismissRequest = { categoryEditTxn = null },
-            confirmButton = {
-                Button(onClick = {
-                    val matched = categories.firstOrNull {
-                        it.name.equals(categoryInput.trim(), ignoreCase = true) &&
-                            it.subcategory.equals(subcategoryInput.trim(), ignoreCase = true)
-                    }
-                    if (matched == null) {
-                        Toast.makeText(context, AppText.CATEGORY_NOT_FOUND, Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    onUpdate(categoryEditTxn!!.copy(txnClass = matched.id))
-                    categoryEditTxn = null
-                }) { Text(AppText.UPDATE) }
-            },
-            dismissButton = {
-                Button(onClick = { categoryEditTxn = null }) { Text(AppText.CANCEL) }
-            },
-            title = { Text(AppText.UPDATE_CATEGORY) },
-            text = {
-                Column {
-                    DropdownField(
-                        label = AppText.CATEGORY,
-                        value = categoryInput,
-                        onClick = {
-                            exportPicker = PickerConfig(
-                                title = AppText.CATEGORY,
-                                options = categoryNames,
-                                onSelect = {
-                                    categoryInput = it
-                                    subcategoryInput = subcategoriesFor(categories, it).firstOrNull().orEmpty()
-                                }
-                            )
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    DropdownField(
-                        label = AppText.SUBCATEGORY,
-                        value = subcategoryInput,
-                        onClick = {
-                            exportPicker = PickerConfig(
-                                title = AppText.SUBCATEGORY,
-                                options = subcategoryOptions,
-                                onSelect = { subcategoryInput = it }
-                            )
-                        }
-                    )
                 }
             }
         )
@@ -858,7 +809,6 @@ fun SmsListScreen(
         FilteredTransactionsScreen(
             transactions = filtered,
             categories = categories,
-            onUpdate = onUpdate,
             onEdit = { editing = it },
             onBack = {
                 filterDate = null
@@ -910,15 +860,12 @@ fun SmsListScreen(
                             is UiItem.Transaction -> TransactionCard(
                                 item,
                                 categoryById = categoryById,
-                                isExpanded = expandedMap.value[item.data.id] == true,
-                                onToggleExpanded = { setExpanded(item.data.id, it) },
-                                onEdit = { editing = it },
-                                onCategoryTap = { openCategoryDialog(it) }
+                                onEdit = { editing = it }
                             )
                             is UiItem.DayHeader -> DayHeaderCard(item.date)
                             is UiItem.DailySummary -> SummaryCard(
                                 title = AppText.DAILY_SUMMARY,
-                                subtitle = item.date.format(DateTimeFormatter.ofPattern(AppText.DATE_FMT_DAY)),
+                                subtitle = "",
                                 debitTotal = item.debitTotal,
                                 creditTotal = item.creditTotal
                             )
@@ -982,57 +929,14 @@ fun SmsListScreen(
 fun FilteredTransactionsScreen(
     transactions: List<TransactionEntity>,
     categories: List<CategoryEntity>,
-    onUpdate: (TransactionEntity) -> Unit,
     onEdit: (TransactionEntity) -> Unit,
     onBack: () -> Unit,
     title: String
 ) {
     BackHandler { onBack() }
-    val context = LocalContext.current
-    val expandedMap = remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-    var categoryEditTxn by remember { mutableStateOf<TransactionEntity?>(null) }
-    var categoryInput by remember { mutableStateOf("") }
-    var subcategoryInput by remember { mutableStateOf("") }
-    var picker by remember { mutableStateOf<PickerConfig?>(null) }
     val categoryById = remember(categories) { categories.associateBy { it.id } }
-    fun setExpanded(id: String, expanded: Boolean) {
-        expandedMap.value = expandedMap.value.toMutableMap().apply { put(id, expanded) }
-    }
-    fun openCategoryDialog(txn: TransactionEntity) {
-        categoryEditTxn = txn
-        val current = categoryForTxnClass(categories, txn.txnClass)
-        categoryInput = current?.name ?: ""
-        subcategoryInput = current?.subcategory ?: ""
-    }
-
-    if (picker != null) {
-        FullscreenPicker(
-            title = picker!!.title,
-            options = picker!!.options,
-            onSelect = { selected ->
-                picker!!.onSelect(selected)
-                picker = null
-            },
-            onClose = { picker = null }
-        )
-        return
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(onClick = onBack) { Text(AppText.BACK) }
-        }
-
         val items = remember(transactions) { buildUiItems(transactions) }
         if (items.isEmpty()) {
             Column(
@@ -1050,7 +954,7 @@ fun FilteredTransactionsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(top = 28.dp, start = 16.dp, end = 16.dp)
         ) {
             items(
                 items = items,
@@ -1067,15 +971,12 @@ fun FilteredTransactionsScreen(
                     is UiItem.Transaction -> TransactionCard(
                         item,
                         categoryById = categoryById,
-                        isExpanded = expandedMap.value[item.data.id] == true,
-                        onToggleExpanded = { setExpanded(item.data.id, it) },
-                        onEdit = onEdit,
-                        onCategoryTap = { openCategoryDialog(it) }
+                        onEdit = onEdit
                     )
                     is UiItem.DayHeader -> DayHeaderCard(item.date)
                     is UiItem.DailySummary -> SummaryCard(
                         title = AppText.DAILY_SUMMARY,
-                        subtitle = item.date.format(DateTimeFormatter.ofPattern(AppText.DATE_FMT_DAY)),
+                        subtitle = "",
                         debitTotal = item.debitTotal,
                         creditTotal = item.creditTotal
                     )
@@ -1088,61 +989,6 @@ fun FilteredTransactionsScreen(
                 }
             }
         }
-    }
-    if (categoryEditTxn != null) {
-        val categoryNames = categoryNamesFromDb(categories)
-        val subcategoryOptions = subcategoriesFor(categories, categoryInput).ifEmpty { listOf(AppText.UNCAT) }
-        AlertDialog(
-            onDismissRequest = { categoryEditTxn = null },
-            confirmButton = {
-                Button(onClick = {
-                    val matched = categories.firstOrNull {
-                        it.name.equals(categoryInput.trim(), ignoreCase = true) &&
-                            it.subcategory.equals(subcategoryInput.trim(), ignoreCase = true)
-                    }
-                    if (matched == null) {
-                        Toast.makeText(context, AppText.CATEGORY_NOT_FOUND, Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    onUpdate(categoryEditTxn!!.copy(txnClass = matched.id))
-                    categoryEditTxn = null
-                }) { Text(AppText.UPDATE) }
-            },
-            dismissButton = {
-                Button(onClick = { categoryEditTxn = null }) { Text(AppText.CANCEL) }
-            },
-            title = { Text(AppText.UPDATE_CATEGORY) },
-            text = {
-                Column {
-                    DropdownField(
-                        label = AppText.CATEGORY,
-                        value = categoryInput,
-                        onClick = {
-                            picker = PickerConfig(
-                                title = AppText.CATEGORY,
-                                options = categoryNames,
-                                onSelect = {
-                                    categoryInput = it
-                                    subcategoryInput = subcategoriesFor(categories, it).firstOrNull().orEmpty()
-                                }
-                            )
-                        }
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    DropdownField(
-                        label = AppText.SUBCATEGORY,
-                        value = subcategoryInput,
-                        onClick = {
-                            picker = PickerConfig(
-                                title = AppText.SUBCATEGORY,
-                                options = subcategoryOptions,
-                                onSelect = { subcategoryInput = it }
-                            )
-                        }
-                    )
-                }
-            }
-        )
     }
 }
 
@@ -1215,6 +1061,7 @@ fun EditTransactionScreen(
     onDelete: (TransactionEntity) -> Unit,
     onClose: () -> Unit
 ) {
+    ConfigureLightStatusBarIcons()
     val context = LocalContext.current
     val isUserCreated = transaction.message.equals(AppText.USER_CREATED, ignoreCase = true)
     var txn by remember(transaction.id) { mutableStateOf(transaction.txn) }
@@ -1229,6 +1076,7 @@ fun EditTransactionScreen(
     var showDiscardConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf<PickerConfig?>(null) }
+    var showCategoryEditor by remember(transaction.id) { mutableStateOf(false) }
 
     // For device SMS entries only classification/txn are editable.
     // User-created entries allow full edits (amount/date/time/address/message).
@@ -1294,6 +1142,7 @@ fun EditTransactionScreen(
     val selectedCategory = if (categoryNames.contains(category)) category else categoryNames.first()
     val subcategoryOptions = subcategoriesFor(categories, selectedCategory)
     val selectedSubcategory = if (subcategoryOptions.contains(subcategory)) subcategory else subcategoryOptions.firstOrNull().orEmpty()
+    val txnColor = if (txn.equals(AppText.CREDIT, ignoreCase = true)) TxnCreditAmount else debitAmountColor()
 
     if (picker != null) {
         // Full-screen picker avoids dropdown clipping/focus issues.
@@ -1311,40 +1160,51 @@ fun EditTransactionScreen(
 
     Scaffold(
         bottomBar = {
-            Button(
-                onClick = {
-                    if (isUserCreated) {
-                        if (editableAmount == null || editableDateMillis > System.currentTimeMillis()) return@Button
-                        onSave(
-                            transaction.copy(
-                                address = addressInput.trim(),
-                                message = transaction.message,
-                                amount = formatCurrency(editableAmount),
-                                txn = txn,
-                                txnChannel = inferTxnChannel(transaction.message),
-                                bank = bankDetailsFromMessage(transaction.message).first,
-                                bankCardNumber = bankDetailsFromMessage(transaction.message).second,
-                                txnClass = txnClassId(selectedCategory, selectedSubcategory),
-                                dateMillis = editableDateMillis,
-                                time = formatSmsTime(editableDateMillis)
-                            )
-                        )
-                    } else {
-                        // For parsed SMS rows preserve original amount/date/time/address/message.
-                        onSave(
-                            transaction.copy(
-                                txn = txn,
-                                txnClass = txnClassId(selectedCategory, selectedSubcategory)
-                            )
-                        )
-                    }
-                },
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                enabled = canSave
+                    .navigationBarsPadding()
+                    .padding(16.dp)
             ) {
-                Text(text = AppText.SAVE, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = {
+                        if (isUserCreated) {
+                            if (editableAmount == null || editableDateMillis > System.currentTimeMillis()) return@Button
+                            onSave(
+                                transaction.copy(
+                                    address = addressInput.trim(),
+                                    message = transaction.message,
+                                    amount = formatCurrency(editableAmount),
+                                    txn = txn,
+                                    txnChannel = inferTxnChannel(transaction.message),
+                                    bank = bankDetailsFromMessage(transaction.message).first,
+                                    bankLogo = transaction.bankLogo,
+                                    bankCardNumber = bankDetailsFromMessage(transaction.message).second,
+                                    txnClass = txnClassId(selectedCategory, selectedSubcategory),
+                                    dateMillis = editableDateMillis,
+                                    time = formatSmsTime(editableDateMillis)
+                                )
+                            )
+                        } else {
+                            // For parsed SMS rows preserve original amount/date/time/address/message.
+                            onSave(
+                                transaction.copy(
+                                    txn = txn,
+                                    txnClass = txnClassId(selectedCategory, selectedSubcategory)
+                                )
+                            )
+                        }
+                    },
+                    shape = MaterialTheme.shapes.extraLarge,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = if (canSave) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        contentColor = if (canSave) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = canSave
+                ) {
+                    Text(text = AppText.SAVE, fontWeight = FontWeight.Bold)
+                }
             }
         }
     ) { padding ->
@@ -1352,99 +1212,29 @@ fun EditTransactionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .statusBarsPadding()
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Text(text = AppText.EDIT_TXN, style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier.fillMaxWidth()
+            Text(
+                text = AppText.EDIT_TXN,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Normal,
+                    fontFamily = RobotoCondensedFamily
+                ),
+                color = appTextColor()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    OutlinedTextField(
-                        value = if (isUserCreated) amountInput else formatCurrency(parseAmountValue(transaction.amount) ?: BigDecimal.ZERO),
-                        onValueChange = {
-                            if (isUserCreated) {
-                                amountInput = sanitizeAmountInput(it)
-                            }
-                        },
-                        label = { Text(AppText.AMOUNT) },
-                        readOnly = !isUserCreated,
-                        enabled = isUserCreated,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    DropdownField(
-                        label = AppText.DATE,
-                        value = formatSmsDate(if (isUserCreated) selectedDateTimeMillis else transaction.dateMillis),
-                        enabled = isUserCreated,
-                        onClick = {
-                            showDatePicker(
-                                context = context,
-                                initialMillis = selectedDateTimeMillis,
-                                onDatePicked = { pickedDate ->
-                                    val updated = withDate(selectedDateTimeMillis, pickedDate)
-                                    if (updated <= System.currentTimeMillis()) {
-                                        selectedDateTimeMillis = updated
-                                    } else {
-                                        Toast.makeText(context, AppText.FUTURE_DATE_TIME_NOT_ALLOWED, Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            )
-                        }
-                    )
-                    DropdownField(
-                        label = AppText.TIME,
-                        value = formatSmsTime(if (isUserCreated) selectedDateTimeMillis else transaction.dateMillis),
-                        enabled = isUserCreated,
-                        onClick = {
-                            showTimePicker(
-                                context = context,
-                                initialMillis = selectedDateTimeMillis
-                            ) { hour, minute ->
-                                val updated = withTime(selectedDateTimeMillis, hour, minute)
-                                if (updated <= System.currentTimeMillis()) {
-                                    selectedDateTimeMillis = updated
-                                } else {
-                                    Toast.makeText(context, AppText.FUTURE_TIME_NOT_ALLOWED, Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    )
-                    OutlinedTextField(
-                        value = if (isUserCreated) addressInput else transaction.address.ifBlank { AppText.UNKNOWN_SENDER },
-                        onValueChange = { if (isUserCreated) addressInput = it },
-                        label = { Text(AppText.SENDER) },
-                        readOnly = !isUserCreated,
-                        enabled = isUserCreated,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (!isUserCreated) {
-                        OutlinedTextField(
-                            value = transaction.message,
-                            onValueChange = {},
-                            label = { Text(AppText.SMS) },
-                            readOnly = true,
-                            enabled = false,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    DropdownField(
-                        label = AppText.TXN_TYPE,
-                        value = txn,
-                        onClick = {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = txn.uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = appTextColor(),
+                        modifier = Modifier.clickable {
                             picker = PickerConfig(
                                 title = AppText.TXN_TYPE,
                                 options = listOf(AppText.DEBIT, AppText.CREDIT),
@@ -1452,52 +1242,192 @@ fun EditTransactionScreen(
                             )
                         }
                     )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    DropdownField(
-                        label = AppText.CATEGORY,
-                        value = selectedCategory,
-                        onClick = {
-                            picker = PickerConfig(
-                                title = AppText.CATEGORY,
-                                options = categoryNames,
-                                onSelect = {
-                                    category = it
-                                    subcategory = subcategoriesFor(categories, it).firstOrNull().orEmpty()
-                                }
-                            )
-                        }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isUserCreated) formatCurrency(amountInput.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+                        else formatCurrency(parseAmountValue(transaction.amount) ?: BigDecimal.ZERO),
+                        style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
+                        color = txnColor
                     )
-
-                    DropdownField(
-                        label = AppText.SUBCATEGORY,
-                        value = selectedSubcategory,
-                        onClick = {
-                            picker = PickerConfig(
-                                title = AppText.SUBCATEGORY,
-                                options = subcategoryOptions,
-                                onSelect = { subcategory = it }
-                            )
-                        }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "${formatSmsDate(if (isUserCreated) selectedDateTimeMillis else transaction.dateMillis)}  |  ${formatSmsTime(if (isUserCreated) selectedDateTimeMillis else transaction.dateMillis)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = appTextColor()
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = if (isUserCreated) addressInput.ifBlank { AppText.UNKNOWN_SENDER } else transaction.address.ifBlank { AppText.UNKNOWN_SENDER },
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal, fontFamily = RobotoCondensedFamily),
+                color = appTextColor()
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            if (!isUserCreated) {
+                Card(
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, txnCardBorderColor()),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text(
+                        text = transaction.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = appTextColor(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp)
+                    )
+                }
+            }
 
+            if (isUserCreated) {
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = { amountInput = sanitizeAmountInput(it) },
+                    label = { Text(AppText.AMOUNT_RUPEE) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                DropdownField(
+                    label = AppText.DATE,
+                    value = formatSmsDate(selectedDateTimeMillis),
+                    onClick = {
+                        showDatePicker(
+                            context = context,
+                            initialMillis = selectedDateTimeMillis,
+                            onDatePicked = { pickedDate ->
+                                val updated = withDate(selectedDateTimeMillis, pickedDate)
+                                if (updated <= System.currentTimeMillis()) {
+                                    selectedDateTimeMillis = updated
+                                } else {
+                                    Toast.makeText(context, AppText.FUTURE_DATE_TIME_NOT_ALLOWED, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                )
+                DropdownField(
+                    label = AppText.TIME,
+                    value = formatSmsTime(selectedDateTimeMillis),
+                    onClick = {
+                        showTimePicker(
+                            context = context,
+                            initialMillis = selectedDateTimeMillis
+                        ) { hour, minute ->
+                            val updated = withTime(selectedDateTimeMillis, hour, minute)
+                            if (updated <= System.currentTimeMillis()) {
+                                selectedDateTimeMillis = updated
+                            } else {
+                                Toast.makeText(context, AppText.FUTURE_TIME_NOT_ALLOWED, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
+                OutlinedTextField(
+                    value = addressInput,
+                    onValueChange = { addressInput = it },
+                    label = { Text(AppText.SENDER) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showCategoryEditor = !showCategoryEditor },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = AppText.CATEGORY.uppercase(),
+                    style = MaterialTheme.typography.titleLarge.copy(fontFamily = RobotoCondensedFamily),
+                    color = appTextColor()
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = AppText.EDIT,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .height(18.dp)
+                        .clickable { showCategoryEditor = true }
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            if (!showCategoryEditor) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Card(
+                        modifier = Modifier.clickable { showCategoryEditor = true },
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Text(
+                            text = selectedCategory,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Card(
+                        modifier = Modifier.clickable { showCategoryEditor = true },
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Text(
+                            text = selectedSubcategory,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            } else {
+                DropdownField(
+                    label = AppText.CATEGORY,
+                    value = selectedCategory,
+                    onClick = {
+                        picker = PickerConfig(
+                            title = AppText.CATEGORY,
+                            options = categoryNames,
+                            onSelect = {
+                                category = it
+                                subcategory = subcategoriesFor(categories, it).firstOrNull().orEmpty()
+                            }
+                        )
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                DropdownField(
+                    label = AppText.SUBCATEGORY,
+                    value = selectedSubcategory,
+                    onClick = {
+                        picker = PickerConfig(
+                            title = AppText.SUBCATEGORY,
+                            options = subcategoryOptions,
+                            onSelect = { subcategory = it }
+                        )
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
             Button(
                 onClick = { showDeleteConfirm = true },
+                shape = MaterialTheme.shapes.extraLarge,
                 colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    containerColor = Color(0xFFFF704D),
+                    contentColor = Color.Black
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(text = AppText.DELETE_TXN_BUTTON)
+                Text(text = AppText.DELETE_TXN_BUTTON, fontWeight = FontWeight.Bold)
             }
-
-            Spacer(modifier = Modifier.height(80.dp))
+            Spacer(modifier = Modifier.height(100.dp))
         }
     }
 }
@@ -1511,6 +1441,7 @@ fun AddTransactionScreen(
     onSave: (TransactionEntity) -> Unit,
     onClose: () -> Unit
 ) {
+    ConfigureLightStatusBarIcons()
     val context = LocalContext.current
     val nowMillis = remember { System.currentTimeMillis() }
     val defaultCategory = categoryNamesFromDb(categories).firstOrNull() ?: AppText.UNCLASSIFIED
@@ -1663,16 +1594,20 @@ fun AddTransactionScreen(
             Button(
                 onClick = {
                     if (amountValue == null || selectedDateMillis > System.currentTimeMillis()) return@Button
+                    val sourceMessage = importedSmsBody ?: AppText.USER_CREATED
+                    val bankInfo = bankDetailsFromMessage(sourceMessage)
+                    val bankLogo = inferLogoFromBankName(bankInfo.first)
                     val entity = TransactionEntity(
                         id = UUID.randomUUID().toString(),
                         address = if (importedSmsBody != null) AppText.IMPORTED_SMS_SOURCE else AppText.USER,
                         // Imported SMS is preserved; manual entries use user-created marker.
-                        message = importedSmsBody ?: AppText.USER_CREATED,
+                        message = sourceMessage,
                         amount = formatCurrency(amountValue),
                         txn = txn,
-                        txnChannel = inferTxnChannel(importedSmsBody ?: AppText.USER_CREATED),
-                        bank = bankDetailsFromMessage(importedSmsBody ?: AppText.USER_CREATED).first,
-                        bankCardNumber = bankDetailsFromMessage(importedSmsBody ?: AppText.USER_CREATED).second,
+                        txnChannel = inferTxnChannel(sourceMessage),
+                        bank = bankInfo.first,
+                        bankLogo = bankLogo,
+                        bankCardNumber = bankInfo.second,
                         txnClass = txnClassId(selectedCategory, selectedSubcategory),
                         dateMillis = selectedDateMillis,
                         time = formatSmsTime(selectedDateMillis)
@@ -1692,12 +1627,19 @@ fun AddTransactionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .statusBarsPadding()
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = AppText.ADD_TXN, style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = AppText.ADD_TXN,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Normal,
+                    fontFamily = RobotoCondensedFamily
+                ),
+                color = appTextColor()
+            )
+            Spacer(modifier = Modifier.height(10.dp))
             Button(
                 onClick = { showImportDialog = true },
                 modifier = Modifier.fillMaxWidth()

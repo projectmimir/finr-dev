@@ -17,6 +17,10 @@ class SmsReceivedReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val db = AppDatabase.getInstance(context)
+                // Receiver can run before MainActivity startup seeding; ensure FK parents exist.
+                seedCategories(db)
+                seedSenders(context, db)
                 val mapped = messages.map { sms ->
                     SmsMessage(
                         address = sms.displayOriginatingAddress.orEmpty(),
@@ -24,7 +28,7 @@ class SmsReceivedReceiver : BroadcastReceiver() {
                         dateMillis = sms.timestampMillis
                     )
                 }
-                upsertIncomingSms(AppDatabase.getInstance(context), mapped)
+                upsertIncomingSms(db, mapped)
             } finally {
                 pendingResult.finish()
             }

@@ -72,6 +72,7 @@ class MainActivity : FragmentActivity() {
                         if (hasPermission) {
                             scope.launch {
                                 seedCategories(db)
+                                seedSenders(context, db)
                                 syncSmsToDb(context, db)
                                 if (!prefs.getBoolean(AppText.PREF_BANK_BACKFILL_DONE, false)) {
                                     backfillBankColumns(db)
@@ -100,6 +101,7 @@ class MainActivity : FragmentActivity() {
                         // Always seed category master data before transaction writes.
                         // This avoids FK crashes when DB is recreated but prefs still mark seeding as done.
                         seedCategories(db)
+                        seedSenders(context, db)
                         prefs.edit().putBoolean(AppText.PREF_CATEGORIES_SEEDED, true).apply()
                         hasPermission = ContextCompat.checkSelfPermission(
                             context,

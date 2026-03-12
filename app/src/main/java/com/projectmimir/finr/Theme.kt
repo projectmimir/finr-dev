@@ -29,14 +29,15 @@ enum class ThemeMode(val prefValue: String) {
 }
 
 val Vaporwave1 = Color(0xFF2C2D3D)
-val Vaporwave2 = Color(0xFFFFBB34)
+val Vaporwave2 = Color(0xFFF29F05)
 val Vaporwave3 = Color(0xFF295059)
 val Vaporwave4 = Color(0xFFF8A3B3)
 val Vaporwave5 = Color(0xFFA3F8B3)
 val Vaporwave6 = Color(0xFFA3F8B3)
 val Vaporwave7 = Color(0xFFFFFFFF)
 val AppBackground = Color(0xFFECEEF2)
-val TxnDebitAmount = Color(0xFFEF476F)
+val TxnDebitAmount = Color(0xFFFF3300)
+val DarkTxnDebitAmount = Color(0xFFB22400)
 val TxnCreditAmount = Color(0xFF06D6A0)
 val TxnCardBorder = Color(0xFFE5E7EC)
 val TxnCardShadow = Color(0xFF9EA4B8)
@@ -48,7 +49,7 @@ val MonthlySentBorder = Color(0xFFEF476F)
 val MonthlySentShadow = Color(0xFF67152A)
 val MonthlyReceivedBorder = Color(0xFF06D6A0)
 val MonthlyReceivedShadow = Color(0xFF039971)
-val DarkBg = Color(0xFF121823)
+val DarkBg = Color(0xFF000000)
 val DarkSurface = Color(0xFF1A2230)
 val DarkCard = Color(0xFF1E2938)
 val DarkText = Color(0xFFECEEF2)
@@ -146,6 +147,7 @@ private val MidnightColors: ColorScheme = darkColorScheme(
     onError = Midnight5
 )
 private val MonoFamily = FontFamily(Font(R.font.roboto_mono))
+val RobotoCondensedFamily = FontFamily(Font(R.font.roboto_condensed_regular))
 private fun mono(style: TextStyle): TextStyle = style.copy(fontFamily = MonoFamily)
 private val BaseTypography = Typography()
 private val AppTypography = Typography(
@@ -200,6 +202,13 @@ fun appTextColor(): Color = when (appThemeMode()) {
     ThemeMode.LIGHT -> Vaporwave1
     ThemeMode.DARK -> DarkText
     ThemeMode.MIDNIGHT -> MidnightText
+}
+
+@Composable
+fun debitAmountColor(): Color = when (appThemeMode()) {
+    ThemeMode.LIGHT -> TxnDebitAmount
+    ThemeMode.DARK -> DarkTxnDebitAmount
+    ThemeMode.MIDNIGHT -> TxnDebitAmount
 }
 
 @Composable

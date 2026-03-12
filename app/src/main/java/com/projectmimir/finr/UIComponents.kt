@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -51,8 +52,8 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.CallMade
+import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
@@ -68,10 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -86,7 +84,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -119,7 +119,7 @@ private fun categoryIcon(name: String?): ImageVector {
     }
 }
 
-private fun bankLogoRes(bank: String?): Int? {
+private fun legacyBankLogoRes(bank: String?): Int? {
     return when (bank?.trim()?.uppercase()) {
         "HDFC" -> R.drawable.hdfc_logo
         "AMEX" -> R.drawable.amex_logo
@@ -135,218 +135,117 @@ private fun bankLogoRes(bank: String?): Int? {
 fun TransactionCard(
     item: UiItem.Transaction,
     categoryById: Map<String, CategoryEntity>,
-    isExpanded: Boolean,
-    onToggleExpanded: (Boolean) -> Unit,
-    onEdit: (TransactionEntity) -> Unit,
-    onCategoryTap: (TransactionEntity) -> Unit
+    onEdit: (TransactionEntity) -> Unit
 ) {
     val msg = item.data
+    val context = LocalContext.current
     val classification = categoryById[msg.txnClass]
     val isUserCreated = msg.message.equals(AppText.USER_CREATED, ignoreCase = true)
     val cardShape = RoundedCornerShape(12.dp)
     val cardContainer = txnCardBg()
-    val amountColor = if (msg.txn.equals(AppText.CREDIT, ignoreCase = true)) TxnCreditAmount else TxnDebitAmount
+    val amountColor = if (msg.txn.equals(AppText.CREDIT, ignoreCase = true)) TxnCreditAmount else debitAmountColor()
     val txnTextColor = appTextColor()
-    val channelLabel = msg.txnChannel
-        .split(",")
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .joinToString(" / ") { it.uppercase() }
-        .ifBlank { "" }
     val bankName = msg.bank.trim()
-    val bankCardNumber = msg.bankCardNumber.trim()
-    val bankLogo = bankLogoRes(bankName)
+    val bankLogoRef = msg.bankLogo.trim()
+    val bankLogo = if (bankLogoRef.isNotBlank()) {
+        context.resources.getIdentifier(bankLogoRef, "drawable", context.packageName).takeIf { it != 0 }
+    } else {
+        legacyBankLogoRes(bankName)
+    }
+    val categoryName = classification?.name ?: AppText.MISC
+    val subcategoryName = classification?.subcategory ?: AppText.UNCAT
 
-    val dismissState = rememberSwipeToDismissBoxState(
-        // High threshold reduces accidental edit opens during list scroll.
-        positionalThreshold = { it * 0.90f },
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.StartToEnd) {
-                onEdit(msg)
-                false
-            } else {
-                false
-            }
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = true,
-        enableDismissFromEndToStart = false,
-        backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
-                Text(
-                    text = AppText.EDIT,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = txnTextColor,
-                    modifier = Modifier.padding(start = 24.dp)
-                )
-            }
-        }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clickable { onEdit(msg) },
+        shape = cardShape,
+        colors = CardDefaults.cardColors(containerColor = cardContainer)
     ) {
-        Card(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .shadow(
-                        elevation = 2.dp,
-                        shape = cardShape,
-                        ambientColor = txnCardShadowColor(),
-                        spotColor = txnCardShadowColor()
-                    ),
-            shape = cardShape,
-            border = BorderStroke(1.dp, txnCardBorderColor()),
-            colors = CardDefaults.cardColors(containerColor = cardContainer)
+                .padding(16.dp)
+                .animateContentSize()
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(16.dp)
-                    .animateContentSize()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .background(txnArrowBadgeBg(), RoundedCornerShape(18.dp))
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (msg.txn.equals(AppText.CREDIT, ignoreCase = true)) {
-                                Icons.Filled.SouthWest
-                            } else {
-                                Icons.Filled.NorthEast
-                            },
-                            contentDescription = null,
-                            tint = amountColor,
-                            modifier = Modifier.height(28.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Spacer(modifier = Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = formatCurrency(parseAmountValue(msg.amount) ?: BigDecimal.ZERO),
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = amountColor,
-                            textAlign = TextAlign.End
-                        )
-                        Text(
-                            text = msg.txn.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = txnTextColor,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 1.dp)
-                        .height(1.dp)
-                        .background(txnCardBorderColor())
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
-                        imageVector = categoryIcon(classification?.name),
+                        imageVector = if (msg.txn.equals(AppText.CREDIT, ignoreCase = true)) {
+                            Icons.Filled.CallReceived
+                        } else {
+                            Icons.Filled.CallMade
+                        },
                         contentDescription = null,
-                        tint = txnTextColor
+                        tint = amountColor,
+                        modifier = Modifier.height(32.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    if (channelLabel.isNotBlank()) {
-                        Text(
-                            text = channelLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = txnTextColor
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
                     if (bankLogo != null) {
                         Image(
                             painter = painterResource(id = bankLogo),
                             contentDescription = null,
                             contentScale = ContentScale.Fit,
-                            modifier = Modifier.height(14.dp)
+                            modifier = Modifier.height(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                    }
-                    if (bankCardNumber.isNotBlank()) {
-                        Text(
-                            text = bankCardNumber,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = txnTextColor
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
-                    if (isUserCreated) {
+                    } else if (isUserCreated) {
                         Icon(
                             imageVector = Icons.Filled.Person,
                             contentDescription = null,
-                            tint = txnTextColor
+                            tint = txnTextColor,
+                            modifier = Modifier.height(18.dp)
                         )
                     }
+                    Icon(
+                        imageVector = categoryIcon(categoryName),
+                        contentDescription = null,
+                        tint = txnTextColor,
+                        modifier = Modifier.height(18.dp)
+                    )
                 }
-                if (!isUserCreated) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = (classification?.name ?: AppText.MISC) + " | " + (classification?.subcategory ?: AppText.UNCAT),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = txnTextColor,
-                            modifier = Modifier.clickable { onCategoryTap(msg) }
-                        )
-                        IconButton(onClick = { onToggleExpanded(!isExpanded) }) {
-                            Icon(
-                                imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                contentDescription = AppText.TOGGLE_SMS_DESC,
-                                tint = txnTextColor
-                            )
-                        }
-                    }
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(if (isExpanded) 0.dp else 5.dp)
-                    )
-                    if (isExpanded) {
-                        Text(
-                            text = msg.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = txnTextColor,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 5.dp)
-                        )
-                    }
-                } else {
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = formatCurrency(parseAmountValue(msg.amount) ?: BigDecimal.ZERO),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = amountColor,
+                    textAlign = TextAlign.End
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
                     Text(
-                        text = (classification?.name ?: AppText.MISC) + " | " + (classification?.subcategory ?: AppText.UNCAT),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = txnTextColor,
-                        modifier = Modifier
-                            .padding(top = 4.dp)
-                            .clickable { onCategoryTap(msg) }
+                        text = categoryName,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = txnTextColor
                     )
-                    Spacer(modifier = Modifier.height(5.dp))
+                }
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Text(
+                        text = subcategoryName,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = txnTextColor
+                    )
                 }
             }
         }
@@ -365,22 +264,26 @@ fun SummaryCard(
     val mode = appThemeMode()
     val containerColor = if (isMonthly) {
         when (mode) {
-            ThemeMode.LIGHT -> Vaporwave1
+            ThemeMode.LIGHT -> Color(0xFFF29F05)
             ThemeMode.DARK -> DarkSurface
             ThemeMode.MIDNIGHT -> Midnight3
         }
     } else {
         when (mode) {
-            ThemeMode.LIGHT -> Vaporwave2
-            ThemeMode.DARK -> Color(0xFF4F3E10)
+            ThemeMode.LIGHT -> Color(0xFFFAD3B5)
+            ThemeMode.DARK -> Color(0xFF262626)
             ThemeMode.MIDNIGHT -> Color(0xFF3A2E43)
         }
     }
     val textColor = if (isMonthly) {
-        if (mode == ThemeMode.MIDNIGHT) Midnight1 else Vaporwave2
+        when (mode) {
+            ThemeMode.LIGHT -> Color.Black
+            ThemeMode.DARK -> Vaporwave2
+            ThemeMode.MIDNIGHT -> Midnight1
+        }
     } else {
         when (mode) {
-            ThemeMode.LIGHT -> Vaporwave1
+            ThemeMode.LIGHT -> Color.Black
             ThemeMode.DARK -> DarkText
             ThemeMode.MIDNIGHT -> Midnight1
         }
@@ -413,20 +316,41 @@ fun SummaryCard(
             ),
         shape = RoundedCornerShape(12.dp),
         border = when {
-            isDaily -> BorderStroke(1.dp, dailySummaryAccent())
-            isMonthly -> BorderStroke(2.dp, monthlyBorderColor)
+            isDaily -> null
+            isMonthly -> null
             else -> null
         },
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium, color = textColor)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.titleSmall,
-                color = textColor,
-                modifier = Modifier.padding(top = 6.dp)
-            )
+            if (isMonthly) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = RobotoCondensedFamily
+                    ),
+                    color = textColor,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            } else {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Normal,
+                        fontFamily = RobotoCondensedFamily
+                    ),
+                    color = textColor
+                )
+                if (subtitle.isNotBlank()) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = textColor,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -437,12 +361,12 @@ fun SummaryCard(
                 Icon(
                     imageVector = Icons.Filled.NorthEast,
                     contentDescription = null,
-                    tint = TxnDebitAmount
+                    tint = debitAmountColor()
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = formatCurrency(debitTotal),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp),
                     color = textColor,
                     textAlign = TextAlign.End
                 )
@@ -462,7 +386,7 @@ fun SummaryCard(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = formatCurrency(creditTotal),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp),
                     color = textColor,
                     textAlign = TextAlign.End
                 )
@@ -709,7 +633,9 @@ fun FloatingDock(
 ) {
     // Dock keeps existing footprint, but each action floats in its own circular button.
     Row(
-        modifier = modifier.padding(bottom = 16.dp, start = 20.dp, end = 20.dp),
+        modifier = modifier
+            .navigationBarsPadding()
+            .padding(bottom = 16.dp, start = 20.dp, end = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(20.dp)
     ) {

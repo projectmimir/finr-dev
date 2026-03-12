@@ -47,10 +47,21 @@ data class TransactionEntity(
     val txn: String,
     val txnChannel: String,
     val bank: String,
+    val bankLogo: String,
     val bankCardNumber: String,
     val txnClass: String,
     val dateMillis: Long,
     val time: String
+)
+
+@Entity(
+    tableName = "senders",
+    indices = [Index(value = ["senderId"], unique = true)]
+)
+data class SenderEntity(
+    @PrimaryKey val senderId: String,
+    val senderName: String,
+    val senderLogo: String
 )
 
 @Dao
@@ -62,7 +73,7 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions")
     suspend fun getAllOnce(): List<TransactionEntity>
 
-    @Query("SELECT * FROM transactions WHERE bank = '' OR bankCardNumber = ''")
+    @Query("SELECT * FROM transactions WHERE bank = '' OR bankLogo = '' OR bankCardNumber = ''")
     suspend fun getWithoutBankInfo(): List<TransactionEntity>
 
     @Query("SELECT MAX(dateMillis) FROM transactions")
@@ -85,20 +96,37 @@ interface TransactionDao {
 }
 
 @Dao
+interface SenderDao {
+    @Query("SELECT * FROM senders")
+    suspend fun getAllOnce(): List<SenderEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<SenderEntity>)
+}
+
+@Dao
 interface CategoryDao {
     // Master data for category/subcategory pickers.
     @Query("SELECT * FROM categories ORDER BY name ASC, subcategory ASC")
     fun getAll(): Flow<List<CategoryEntity>>
+
+    @Query("SELECT * FROM categories")
+    suspend fun getAllOnce(): List<CategoryEntity>
 
     // IGNORE avoids delete+reinsert behavior that can violate FK constraints from transactions.
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun upsertAll(items: List<CategoryEntity>)
 }
 
-@Database(entities = [TransactionEntity::class, CategoryEntity::class], version = 8, exportSchema = false)
+@Database(
+    entities = [TransactionEntity::class, CategoryEntity::class, SenderEntity::class],
+    version = 9,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun categoryDao(): CategoryDao
+    abstract fun senderDao(): SenderDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null

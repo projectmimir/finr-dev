@@ -54,8 +54,8 @@ object AppText {
     const val USER_CREATED = "User created"
     const val UNKNOWN_SENDER = "Unknown Sender"
 
-    const val DAILY_SUMMARY = "DAILY SUMMARY"
-    const val MONTHLY_SUMMARY = "MONTHLY SUMMARY"
+    const val DAILY_SUMMARY = "Daily Summary"
+    const val MONTHLY_SUMMARY = "Monthly Summary"
     const val SENT = "Sent"
     const val RECEIVED = "Received"
 
@@ -105,8 +105,8 @@ object AppText {
     const val UPDATE_CATEGORY = "Update Category"
     const val CATEGORY_NOT_FOUND = "Category/Sub Category not found"
 
-    const val EDIT_TXN = "Edit Transaction"
-    const val ADD_TXN = "Add Transaction"
+    const val EDIT_TXN = "EDIT TRANSACTION"
+    const val ADD_TXN = "ADD TRANSACTION"
     const val IMPORT_SMS = "Import SMS"
     const val IMPORT_SMS_PASTE = "Paste SMS"
     const val IMPORT_SMS_EMPTY = "Paste an SMS first"
@@ -142,7 +142,7 @@ object AppText {
     const val DB_TABLE_PREFIX = "Table: "
     const val DOUBLE_SPACE = "  "
     const val DATE_FMT_DAY = "dd MMM yyyy"
-    const val DATE_FMT_MONTH = "MMM yyyy"
+    const val DATE_FMT_MONTH = "MMMM yyyy"
     const val KEY_DAILY_PREFIX = "daily-"
     const val KEY_MONTHLY_PREFIX = "monthly-"
     const val KEY_DAY_PREFIX = "day-"

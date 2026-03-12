@@ -25,24 +25,24 @@ sealed class UiItem {
 data class CategorySeed(val name: String, val subcategory: String, val type: String, val emoji: String)
 
 val categorySeedList = listOf(
-    CategorySeed("Housing", "Rent/Mortgage/Maintenance", "Essential", "🏠"),
-    CategorySeed("Utilities", "Electric/Water/Gas", "Essential", "💡"),
+    CategorySeed("Housing", "Rent/Mortgage/Maintenance/Plumber/Electrician/Carpenter", "Essential", "🏠"),
+    CategorySeed("Utilities", "Electric/Water/Gas/Internet", "Essential", "💡"),
     CategorySeed("Groceries", "Food/Supplies", "Essential", "🛒"),
-    CategorySeed("Transportation", "Fuel/Transit/Maintenance/Cab/Auto", "Essential", "🚗"),
+    CategorySeed("Transportation", "Fuel/Transit/Toll/Maintenance/Cab/Auto/Metro/Bus", "Essential", "🚗"),
     CategorySeed("Communication", "Phone/Internet", "Essential", "📶"),
     CategorySeed("Insurance", "Health/Auto/Home", "Essential", "🛡️"),
     CategorySeed("Healthcare", "Medical/Dental/Pharmacy", "Essential", "🏥"),
     CategorySeed("Entertainment", "Movies/Concerts/Hobbies", "Discretionary", "🎬"),
-    CategorySeed("Dining Out", "Restaurants/Coffee", "Discretionary", "🍛"),
+    CategorySeed("Dining Out", "Restaurants/Coffee/Cafe/Pub", "Discretionary", "🍛"),
     CategorySeed("Subscriptions", "Streaming/Gym/Software", "Discretionary", "📺"),
     CategorySeed("Personal Care", "Hair/Grooming/Toiletries", "Discretionary", "🧴"),
     CategorySeed("Shopping", "Clothing/Electronics", "Discretionary", "🛍️"),
-    CategorySeed("Travel", "Vacation/Hotels", "Discretionary", "✈️"),
+    CategorySeed("Travel", "Flights/Hotels", "Discretionary", "✈️"),
     CategorySeed("Debt Repayment", "Credit Cards/Loans", "Financial", "💳"),
     CategorySeed("Savings & Investments", "Emergency/Retirement", "Financial", "📈"),
-    CategorySeed("Gifts & Donations", "Holidays/Charity", "Financial", "🎁"),
+    CategorySeed("Gifts & Donations", "Charity", "Financial", "🎁"),
     CategorySeed("Pets", "Food/Vet/Insurance", "Specialized", "🐾"),
     CategorySeed("Childcare/Education", "Daycare/Tuition", "Specialized", "🎓"),
     CategorySeed("Professional Services", "Legal/Financial", "Specialized", "💼"),
-    CategorySeed("Miscellaneous", "Uncategorised/Settlement", "Other", "📦")
+    CategorySeed("Misc.", "TBD/Settlement", "Other", "📦")
 )

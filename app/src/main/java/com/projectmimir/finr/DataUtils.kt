@@ -3,6 +3,8 @@ package com.projectmimir.finr
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.provider.Telephony
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.security.MessageDigest
@@ -38,8 +40,97 @@ val NON_TRANSACTION_BLOCKLIST = listOf(
     "disconnection",
     "ignore if paid",
     "pay now",
-    "retry"
+    "retry",
+    "pnr",
+    "pay immediately"
 )
+
+private fun parseSenderCsvLine(line: String): List<String> {
+    val out = mutableListOf<String>()
+    val current = StringBuilder()
+    var inQuotes = false
+    var i = 0
+    while (i < line.length) {
+        val c = line[i]
+        if (c == '"') {
+            if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                current.append('"')
+                i++
+            } else {
+                inQuotes = !inQuotes
+            }
+        } else if (c == ',' && !inQuotes) {
+            out.add(current.toString().trim())
+            current.clear()
+        } else {
+            current.append(c)
+        }
+        i++
+    }
+    out.add(current.toString().trim())
+    return out
+}
+
+private fun senderEntitiesFromCsv(context: Context): List<SenderEntity> {
+    val stream = runCatching { context.assets.open("senders.csv") }.getOrNull() ?: return emptyList()
+    val rows = mutableListOf<SenderEntity>()
+    BufferedReader(InputStreamReader(stream)).use { reader ->
+        var isFirstLine = true
+        reader.forEachLine { raw ->
+            val line = raw.trim()
+            if (line.isEmpty()) return@forEachLine
+            if (isFirstLine) {
+                isFirstLine = false
+                return@forEachLine
+            }
+            val cols = parseSenderCsvLine(line)
+            if (cols.isEmpty()) return@forEachLine
+            val senderId = cols.getOrNull(0).orEmpty().trim().uppercase(Locale.getDefault())
+            if (senderId.isBlank()) return@forEachLine
+            val senderName = cols.getOrNull(1).orEmpty().trim()
+            val senderLogo = cols.getOrNull(2).orEmpty().trim()
+            rows.add(SenderEntity(senderId = senderId, senderName = senderName, senderLogo = senderLogo))
+        }
+    }
+    return rows
+}
+
+suspend fun seedSenders(context: Context, db: AppDatabase) {
+    withContext(Dispatchers.IO) {
+        val rows = senderEntitiesFromCsv(context)
+        if (rows.isNotEmpty()) {
+            db.senderDao().upsertAll(rows)
+        }
+    }
+}
+
+fun extractSenderId(address: String): String? {
+    val tokens = address.split("-")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+    if (tokens.size < 2) return null
+    val penultimate = tokens[tokens.size - 2]
+    return penultimate.ifBlank { null }
+}
+
+private fun senderDirectoryKey(senderId: String): String = senderId.uppercase(Locale.getDefault())
+
+private fun senderLookup(address: String, senderDirectory: Map<String, SenderEntity>): SenderEntity? {
+    val senderId = extractSenderId(address) ?: return null
+    return senderDirectory[senderDirectoryKey(senderId)]
+}
+
+fun inferLogoFromBankName(bank: String): String {
+    val normalized = bank.trim().uppercase(Locale.getDefault())
+    return when {
+        normalized.startsWith("HDFC") -> "hdfc_logo"
+        normalized.startsWith("AMEX") -> "amex_logo"
+        normalized.startsWith("ICICI") -> "icici_logo"
+        normalized.startsWith("STANCHART") -> "stanchart_logo"
+        normalized.startsWith("AXIS") -> "axis_logo"
+        else -> ""
+    }
+}
 
 fun readSmsSince(context: Context, sinceDateMillisExclusive: Long?): List<SmsMessage> {
     // Pull only newer inbox messages when a watermark is available.
@@ -140,7 +231,23 @@ suspend fun upsertIncomingSms(db: AppDatabase, sms: List<SmsMessage>): Int {
     return withContext(Dispatchers.IO) {
         if (sms.isEmpty()) return@withContext 0
         val existing = db.transactionDao().getAllOnce().associateBy { it.id }
-        val entities = smsToTransactionEntities(sms, existing)
+        val categories = db.categoryDao().getAllOnce()
+        val validTxnClassIds = categories.map { it.id }.toSet()
+        if (validTxnClassIds.isEmpty()) return@withContext 0
+        val fallbackTxnClassId = categories.lastOrNull {
+            it.name.equals(AppText.MISC, ignoreCase = true) &&
+                it.subcategory.equals(AppText.UNCAT, ignoreCase = true)
+        }?.id ?: categories.last().id
+        val senderDirectory = db.senderDao()
+            .getAllOnce()
+            .associateBy { senderDirectoryKey(it.senderId) }
+        val entities = smsToTransactionEntities(
+            sms = sms,
+            existing = existing,
+            senderDirectory = senderDirectory,
+            validTxnClassIds = validTxnClassIds,
+            fallbackTxnClassId = fallbackTxnClassId
+        )
         if (entities.isNotEmpty()) {
             db.transactionDao().upsertAll(entities)
         }
@@ -150,7 +257,10 @@ suspend fun upsertIncomingSms(db: AppDatabase, sms: List<SmsMessage>): Int {
 
 private fun smsToTransactionEntities(
     sms: List<SmsMessage>,
-    existing: Map<String, TransactionEntity>
+    existing: Map<String, TransactionEntity>,
+    senderDirectory: Map<String, SenderEntity>,
+    validTxnClassIds: Set<String>,
+    fallbackTxnClassId: String
 ): List<TransactionEntity> {
     val miscClassId = "Miscellaneous|Uncategorised"
     val existingByBucket = mutableMapOf<String, MutableSet<String>>()
@@ -166,10 +276,12 @@ private fun smsToTransactionEntities(
     val entities = mutableListOf<TransactionEntity>()
 
     sms.forEach { msg ->
+        // Sender allowlist is the first gate for transaction SMS identification.
+        if (!isTxnCheck(msg, senderDirectory)) return@forEach
         if (isExplicitlyNonTransaction(msg.body)) return@forEach
-        // New sender-based gate for transaction SMS identification.
-        if (!isTxnCheck(msg)) return@forEach
-        // Bank fingerprint is computed immediately after sender gate for downstream extraction.
+        val senderRecord = senderLookup(msg.address, senderDirectory)
+        if (senderRecord == null) return@forEach
+        // Bank format checks are evaluated only for sender IDs explicitly present in sender list.
         val bankCheckResult = checkAllBanks(msg.body)
         val type = classifyTransaction(msg) ?: return@forEach
         val amount = extractAmount(msg.body, bankCheckResult) ?: return@forEach
@@ -188,8 +300,20 @@ private fun smsToTransactionEntities(
         val id = transactionId(msg)
         val prior = existing[id]
         val inferredClass = autoTxnClassForMessage(msg.body) ?: miscClassId
+        val normalizedTxnClass = when {
+            prior?.txnClass != null && validTxnClassIds.contains(prior.txnClass) -> prior.txnClass
+            validTxnClassIds.contains(inferredClass) -> inferredClass
+            validTxnClassIds.contains(fallbackTxnClassId) -> fallbackTxnClassId
+            else -> validTxnClassIds.first()
+        }
         val inferredChannel = inferTxnChannel(msg.body, bankCheckResult)
-        val (inferredBank, inferredBankCardNumber) = bankDetailsFromCheckResult(bankCheckResult)
+        val (bankFromMessage, inferredBankCardNumber) = bankDetailsFromCheckResult(bankCheckResult)
+        val inferredBank = senderRecord?.senderName?.takeIf { it.isNotBlank() } ?: bankFromMessage
+        val inferredBankLogo = if (senderRecord != null) {
+            senderRecord.senderLogo.trim()
+        } else {
+            inferLogoFromBankName(inferredBank)
+        }
 
         entities.add(
             TransactionEntity(
@@ -201,8 +325,9 @@ private fun smsToTransactionEntities(
                 txn = prior?.txn ?: txnValue,
                 txnChannel = prior?.txnChannel ?: inferredChannel,
                 bank = prior?.bank ?: inferredBank,
+                bankLogo = prior?.bankLogo ?: inferredBankLogo,
                 bankCardNumber = prior?.bankCardNumber ?: inferredBankCardNumber,
-                txnClass = prior?.txnClass ?: inferredClass,
+                txnClass = normalizedTxnClass,
                 dateMillis = msg.dateMillis,
                 time = formatSmsTime(msg.dateMillis)
             )
@@ -211,11 +336,14 @@ private fun smsToTransactionEntities(
     return entities
 }
 
-fun isTxnCheck(msg: SmsMessage): Boolean {
-    // Lightweight sender heuristic currently used by sync flow.
+fun isTxnCheck(msg: SmsMessage, senderDirectory: Map<String, SenderEntity> = emptyMap()): Boolean {
+    // Sender-based allowlist gate: sender ID must be present in local sender directory.
     if (isExplicitlyNonTransaction(msg.body)) return false
     val sender = msg.address.trim()
-    return sender.endsWith("-S", ignoreCase = true) || sender.endsWith("-T", ignoreCase = true)
+    val hasValidSuffix = sender.endsWith("-S", ignoreCase = true) || sender.endsWith("-T", ignoreCase = true)
+    if (!hasValidSuffix) return false
+    val senderId = extractSenderId(sender) ?: return false
+    return senderDirectory.containsKey(senderDirectoryKey(senderId))
 }
 
 fun isTransactional(msg: SmsMessage): Boolean {
@@ -278,16 +406,25 @@ suspend fun backfillBankColumns(db: AppDatabase): Int {
     return withContext(Dispatchers.IO) {
         val missing = db.transactionDao().getWithoutBankInfo()
         if (missing.isEmpty()) return@withContext 0
+        val senderDirectory = db.senderDao()
+            .getAllOnce()
+            .associateBy { senderDirectoryKey(it.senderId) }
         val patched = missing.mapNotNull { txn ->
-            val (inferredBank, inferredCard) = bankDetailsFromMessage(txn.message)
+            val senderRecord = senderLookup(txn.address, senderDirectory)
+            if (senderRecord == null) return@mapNotNull null
+            val (bankFromMessage, inferredCard) = bankDetailsFromMessage(txn.message)
+            val inferredBank = senderRecord.senderName.takeIf { it.isNotBlank() } ?: bankFromMessage
+            val inferredLogo = senderRecord.senderLogo.trim().ifBlank { inferLogoFromBankName(inferredBank) }
             val inferredChannel = inferTxnChannel(txn.message)
             val newBank = if (txn.bank.isBlank()) inferredBank else txn.bank
+            val newBankLogo = if (txn.bankLogo.isBlank()) inferredLogo else txn.bankLogo
             val newBankCard = if (txn.bankCardNumber.isBlank()) inferredCard else txn.bankCardNumber
             val newChannel = normalizedTxnChannel(txn.txnChannel, inferredChannel)
-            if (newBank != txn.bank || newBankCard != txn.bankCardNumber || newChannel != txn.txnChannel) {
+            if (newBank != txn.bank || newBankLogo != txn.bankLogo || newBankCard != txn.bankCardNumber || newChannel != txn.txnChannel) {
                 txn.copy(
                     txnChannel = newChannel,
                     bank = newBank,
+                    bankLogo = newBankLogo,
                     bankCardNumber = newBankCard
                 )
             } else {
@@ -313,6 +450,15 @@ fun hasCurrency(text: String): Boolean {
     return pattern1.containsMatchIn(text) || pattern2.containsMatchIn(text)
 }
 
+private fun isLikelyMoneyToken(raw: String): Boolean {
+    val cleaned = raw.replace(",", "").trim()
+    if (cleaned.isBlank()) return false
+    // Reject long plain numeric strings that are usually reference IDs.
+    if (cleaned.all { it.isDigit() } && cleaned.length > 6) return false
+    val value = cleaned.toBigDecimalOrNull() ?: return false
+    return value > BigDecimal.ZERO
+}
+
 fun extractAmount(text: String, bankCheckResult: String? = checkAllBanks(text)): String? {
     // checking specifically for stanchart
     val stanchartHit = bankCheckResult?.startsWith("STANCHART", ignoreCase = true) == true
@@ -329,13 +475,28 @@ fun extractAmount(text: String, bankCheckResult: String? = checkAllBanks(text)):
 
     val prefixed = Regex("""(?:₹|rs\.?|inr)\s*([0-9][0-9,]*(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
     val prefixedMatch = prefixed.find(text)
-    if (prefixedMatch != null) {
+    if (prefixedMatch != null && isLikelyMoneyToken(prefixedMatch.groupValues[1])) {
         return "₹${prefixedMatch.groupValues[1]}"
     }
 
-    val amountOnly = Regex("""\b([0-9][0-9,]*(?:\.\d{1,2})?)\b""")
-    val fallbackMatch = amountOnly.find(text)
-    return fallbackMatch?.let { "₹${it.groupValues[1]}" }
+    val suffixed = Regex("""\b([0-9][0-9,]*(?:\.\d{1,2})?)\s*(?:rs\.?|inr)\b""", RegexOption.IGNORE_CASE)
+    val suffixedMatch = suffixed.find(text)
+    if (suffixedMatch != null && isLikelyMoneyToken(suffixedMatch.groupValues[1])) {
+        return "₹${suffixedMatch.groupValues[1]}"
+    }
+
+    val contextual = Regex(
+        """\b(?:amount|amt|debited|credited|spent|paid|payment|received|withdrawn|for)\b[^0-9₹]{0,20}(?:₹|rs\.?|inr)?\s*([0-9][0-9,]*(?:\.\d{1,2})?)""",
+        RegexOption.IGNORE_CASE
+    )
+    val contextualMatch = contextual.find(text)
+    if (contextualMatch != null && isLikelyMoneyToken(contextualMatch.groupValues[1])) {
+        return "₹${contextualMatch.groupValues[1]}"
+    }
+
+    // Deliberately avoid a generic number fallback to prevent transaction/reference IDs
+    // from being parsed as amounts.
+    return null
 }
 
 fun classifyTransaction(msg: SmsMessage): TransactionType? {
@@ -502,6 +663,7 @@ fun transactionToJson(txn: TransactionEntity): String {
           "txn": "${txn.txn}",
           "txn_channel": "${txn.txnChannel}",
           "bank": "${txn.bank}",
+          "bank_logo": "${txn.bankLogo}",
           "bank_card_number": "${txn.bankCardNumber}",
           "txn_class": "${txn.txnClass}",
           "date": "${formatSmsDate(txn.dateMillis)}",
@@ -513,8 +675,18 @@ fun transactionToJson(txn: TransactionEntity): String {
 
 fun txnClassId(category: String, subcategory: String): String = "$category|$subcategory"
 
-fun categoryForTxnClass(categories: List<CategoryEntity>, txnClass: String): CategoryEntity? {
+fun categoryForTxnClass(categories: List<CategoryEntity>, txnClass: String): CategoryEntity {
     return categories.firstOrNull { it.id == txnClass }
+        ?: categories.lastOrNull { it.name.equals(AppText.MISC, ignoreCase = true) }
+        ?: categories.lastOrNull { it.name.equals("Miscellaneous", ignoreCase = true) }
+        ?: categories.lastOrNull()
+        ?: CategoryEntity(
+            id = txnClassId(AppText.MISC, AppText.UNCAT),
+            name = AppText.MISC,
+            subcategory = AppText.UNCAT,
+            type = "Other",
+            emoji = ""
+        )
 }
 
 data class DbColumnSchema(
@@ -584,8 +756,8 @@ fun transactionsToCsv(
     val headers = listOf(
         "Transaction Date",
         "Transaction Time",
-        "Amount (INR)",
-        "Transaction Type",
+        "Debit Amount (INR)",
+        "Credit Amount (INR)",
         "Category",
         "Subcategory",
         "Transaction Channel",
@@ -596,11 +768,14 @@ fun transactionsToCsv(
         .sortedByDescending { it.dateMillis }
         .map { txn ->
             val cls = categoryForTxnClass(categories, txn.txnClass)
+            val isCredit = txn.txn.equals(AppText.CREDIT, ignoreCase = true)
+            val debitAmount = if (isCredit) "" else txn.amount
+            val creditAmount = if (isCredit) txn.amount else ""
             listOf(
                 formatSmsDate(txn.dateMillis),
                 txn.time,
-                txn.amount,
-                txn.txn.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
+                debitAmount,
+                creditAmount,
                 cls?.name ?: AppText.MISC,
                 cls?.subcategory ?: AppText.UNCAT,
                 txn.txnChannel,
