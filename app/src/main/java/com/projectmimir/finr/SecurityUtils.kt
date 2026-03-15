@@ -29,8 +29,8 @@ fun runBiometricPrompt(
     )
 
     val promptInfo = BiometricPrompt.PromptInfo.Builder()
-        .setTitle(AppText.BIO_TITLE)
-        .setSubtitle(AppText.BIO_SUBTITLE)
+        .setTitle(activity.getString(R.string.bio_title))
+        .setSubtitle(activity.getString(R.string.bio_subtitle))
         .setDeviceCredentialAllowed(true)
         .build()
 

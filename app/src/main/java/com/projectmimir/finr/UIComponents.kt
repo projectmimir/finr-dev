@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -254,13 +255,13 @@ fun TransactionCard(
 
 @Composable
 fun SummaryCard(
-    title: String,
+    type: SummaryCardType,
     subtitle: String,
     debitTotal: BigDecimal,
     creditTotal: BigDecimal
 ) {
-    val isDaily = title == AppText.DAILY_SUMMARY
-    val isMonthly = title == AppText.MONTHLY_SUMMARY
+    val isDaily = type == SummaryCardType.DAILY
+    val isMonthly = type == SummaryCardType.MONTHLY
     val mode = appThemeMode()
     val containerColor = if (isMonthly) {
         when (mode) {
@@ -334,7 +335,7 @@ fun SummaryCard(
                 )
             } else {
                 Text(
-                    text = title,
+                    text = stringResource(R.string.daily_summary),
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Normal,
                         fontFamily = RobotoCondensedFamily
@@ -434,14 +435,14 @@ fun HeaderBar(
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.finr_logo),
-                        contentDescription = AppText.LOGO_DESC,
+                        contentDescription = stringResource(R.string.logo_desc),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.height(32.dp)
                     )
                 }
             }
             Text(
-                text = AppText.APP_NAME,
+                text = stringResource(R.string.app_name_display),
                 style = MaterialTheme.typography.headlineSmall,
                 color = headerTextColor
             )
@@ -450,7 +451,7 @@ fun HeaderBar(
         IconButton(onClick = onMenuToggle) {
             Icon(
                 imageVector = Icons.Filled.Menu,
-                contentDescription = AppText.MENU_DESC,
+                contentDescription = stringResource(R.string.menu_desc),
                 tint = headerTextColor
             )
         }
@@ -541,17 +542,17 @@ fun SlideOutMenu(
                         ThemeMode.DARK -> Icons.Filled.DarkMode
                         ThemeMode.MIDNIGHT -> Icons.Filled.DarkMode
                     },
-                    label = AppText.THEME,
+                    label = stringResource(R.string.theme),
                     onClick = onThemeClick
                 )
                 MenuItemRow(
                     icon = Icons.Filled.Info,
-                    label = AppText.ABOUT,
+                    label = stringResource(R.string.about),
                     onClick = onAboutClick
                 )
                 MenuItemRow(
                     icon = Icons.Filled.Autorenew,
-                    label = AppText.RECYCLE,
+                    label = stringResource(R.string.recycle),
                     onClick = onRecycleClick
                 )
                 Row(
@@ -570,7 +571,7 @@ fun SlideOutMenu(
                         )
                         Spacer(modifier = Modifier.width(14.dp))
                         Text(
-                            text = AppText.SECURE,
+                            text = stringResource(R.string.secure),
                             style = MaterialTheme.typography.titleLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -589,7 +590,7 @@ fun SlideOutMenu(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = AppText.SPLASH_POWERED_BY,
+                        text = stringResource(R.string.powered_by),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -647,7 +648,7 @@ fun FloatingDock(
             IconButton(onClick = onAdd) {
                 Icon(
                     imageVector = Icons.Filled.AddCircle,
-                    contentDescription = AppText.ADD_TXN_DESC,
+                    contentDescription = stringResource(R.string.add_txn_desc),
                     tint = Vaporwave7
                 )
             }
@@ -661,7 +662,7 @@ fun FloatingDock(
             IconButton(onClick = onCalendar) {
                 Icon(
                     imageVector = Icons.Filled.CalendarMonth,
-                    contentDescription = AppText.CALENDAR_DESC,
+                    contentDescription = stringResource(R.string.calendar_desc),
                     tint = Vaporwave7
                 )
             }
@@ -675,12 +676,17 @@ fun FloatingDock(
             IconButton(onClick = onExport) {
                 Icon(
                     imageVector = Icons.Filled.FileUpload,
-                    contentDescription = AppText.EXPORT_DESC,
+                    contentDescription = stringResource(R.string.export_desc),
                     tint = Vaporwave7
                 )
             }
         }
     }
+}
+
+enum class SummaryCardType {
+    DAILY,
+    MONTHLY
 }
 
 @Composable

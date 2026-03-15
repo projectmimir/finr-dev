@@ -116,8 +116,8 @@ private suspend fun postDailySummaryNotification(context: Context) {
     }
 
     ensureChannel(context)
-    val outLine = "$ARROW_OUT ${AppText.DAILY_NOTIF_SENT_PREFIX}${formatCurrency(debitTotal)}"
-    val inLine = "$ARROW_IN ${AppText.DAILY_NOTIF_RECEIVED_PREFIX}${formatCurrency(creditTotal)}"
+    val outLine = "$ARROW_OUT ${context.getString(R.string.daily_notif_sent_prefix)}${formatCurrency(debitTotal)}"
+    val inLine = "$ARROW_IN ${context.getString(R.string.daily_notif_received_prefix)}${formatCurrency(creditTotal)}"
     val preview = "$outLine  |  $inLine"
     val styledSummary = SpannableStringBuilder()
         .append(outLine)
@@ -163,7 +163,7 @@ private suspend fun postDailySummaryNotification(context: Context) {
 
     val notification = NotificationCompat.Builder(context, DAILY_SUMMARY_CHANNEL_ID)
         .setSmallIcon(R.drawable.ic_stat_finr)
-        .setContentTitle(AppText.DAILY_NOTIF_TITLE)
+        .setContentTitle(context.getString(R.string.daily_notif_title))
         .setContentText(preview)
         .setStyle(NotificationCompat.BigTextStyle().bigText(styledSummary))
         .setAutoCancel(true)
@@ -179,10 +179,10 @@ private fun ensureChannel(context: Context) {
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     val channel = NotificationChannel(
         DAILY_SUMMARY_CHANNEL_ID,
-        AppText.DAILY_NOTIF_CHANNEL_NAME,
+        context.getString(R.string.daily_notif_channel_name),
         NotificationManager.IMPORTANCE_DEFAULT
     ).apply {
-        description = AppText.DAILY_NOTIF_CHANNEL_DESC
+        description = context.getString(R.string.daily_notif_channel_desc)
     }
     manager.createNotificationChannel(channel)
 }
